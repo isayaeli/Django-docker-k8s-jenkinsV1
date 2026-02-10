@@ -1,0 +1,264 @@
+# .dockerignore
+# Prevents unnecessary files from being copied into Docker images
+# Based on Django project structure with Docker, Kubernetes, and Jenkins
+
+###############################################################################
+# Git
+###############################################################################
+.git/
+.gitignore
+.gitattributes
+.github/
+
+###############################################################################
+# Python
+###############################################################################
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+*.pyo
+*.pyd
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+.tox/
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv
+.virtualenv
+
+###############################################################################
+# IDEs and Editors
+###############################################################################
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+.settings/
+.editorconfig
+
+###############################################################################
+# Documentation
+###############################################################################
+docs/
+*.md
+README.md
+CHANGELOG.md
+LICENSE
+CONTRIBUTING.md
+
+###############################################################################
+# CI/CD and Jenkins
+###############################################################################
+.travis.yml
+.circleci/
+.gitlab-ci.yml
+jenkins/
+.github/
+
+# Jenkins files (all Jenkinsfiles and scripts)
+Jenkinsfile
+Jenkinsfile.*
+jenkins/Jenkinsfile*
+jenkins/scripts/
+
+###############################################################################
+# Docker Configuration Files
+###############################################################################
+# Docker compose files (used for building, not needed inside image)
+docker-compose.yml
+docker-compose.*.yml
+docker-compose.dev.yml
+docker-compose.test.yml
+docker-compose.override.yml
+
+# Dockerfiles (used for building, not needed inside image)
+Dockerfile
+Dockerfile.*
+docker/nginx/Dockerfile
+docker/django/Dockerfile*
+.dockerignore
+
+# Other docker files
+docker/postgres/
+
+###############################################################################
+# Kubernetes
+###############################################################################
+# All K8s manifests and configurations
+k8s/
+k8s-scripts/
+*.yaml
+*.yml
+kustomization.yaml
+
+# Specifically exclude K8s directories
+k8s/base/
+k8s/overlays/
+k8s/jobs/
+
+###############################################################################
+# Testing
+###############################################################################
+tests/
+test_*.py
+*_test.py
+conftest.py
+.pytest_cache/
+.coverage
+.coveragerc
+htmlcov/
+pytest.ini
+.tox/
+setup.cfg
+pyproject.toml
+
+# Test data
+tests/fixtures/
+tests/integration/
+tests/unit/
+tests/e2e/
+
+###############################################################################
+# Development Environment Files
+###############################################################################
+.env.example
+.env.dev
+.env.staging
+.env.local
+.env.test
+
+# IMPORTANT: .env files should be injected via Kubernetes secrets
+# not baked into the image
+.env*
+
+###############################################################################
+# Database Files
+###############################################################################
+*.sqlite3
+*.db
+db.sqlite3
+*.sql
+*.dump
+app/media/  # User uploaded files (should be in volumes/S3)
+
+###############################################################################
+# Static Files (if using S3/CDN)
+###############################################################################
+# Uncomment if serving static from S3/CDN
+# app/staticfiles/
+# app/static_root/
+
+# Keep source static files for collectstatic
+# !app/static/
+
+###############################################################################
+# Scripts and Build Tools
+###############################################################################
+scripts/
+Makefile
+
+# Script files
+scripts/setup.sh
+scripts/docker-build.sh
+scripts/docker-push.sh
+scripts/k8s-deploy.sh
+scripts/backup-db.sh
+scripts/restore-db.sh
+scripts/generate-secrets.sh
+
+###############################################################################
+# Backups and Temporary Files
+###############################################################################
+backups/
+*.backup
+*.bak
+*.tmp
+tmp/
+temp/
+*.cache
+
+###############################################################################
+# Logs
+###############################################################################
+*.log
+logs/
+app/logs/
+
+###############################################################################
+# Node/Frontend (if applicable)
+###############################################################################
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+package-lock.json
+yarn.lock
+.pnpm-debug.log
+
+###############################################################################
+# OS Generated Files
+###############################################################################
+.DS_Store
+Thumbs.db
+Desktop.ini
+._*
+.Spotlight-V100
+.Trashes
+
+###############################################################################
+# Build Artifacts
+###############################################################################
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+*.whl
+
+###############################################################################
+# Pre-commit and Code Quality
+###############################################################################
+.pre-commit-config.yaml
+.flake8
+.pylintrc
+.black
+.isort.cfg
+
+###############################################################################
+# Local Development
+###############################################################################
+# Local override files
+*.local
+local/
+scratch/
+
+###############################################################################
+# What SHOULD be included in the image:
+###############################################################################
+# ✅ app/ directory (Django application code)
+# ✅ app/requirements/ (Python dependencies)
+# ✅ app/manage.py
+# ✅ app/myproject/ (Django project settings)
+# ✅ app/apps/ (Django apps)
+# ✅ app/templates/
+# ✅ app/locale/
+# ✅ app/static/ (source static files for collectstatic)
+# ✅ docker/django/entrypoint.sh
+# ✅ docker/django/start.sh
