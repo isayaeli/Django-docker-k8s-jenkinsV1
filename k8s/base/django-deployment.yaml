@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django
+  labels:
+    app: django
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: django
+  template:
+    metadata:
+      labels:
+        app: django
+    spec:
+      initContainers:
+      - name: migrate
+        image: YOUR_REGISTRY/django:latest
+        command: ['python', 'manage.py', 'migrate', '--noinput']
+        envFrom:
+        - configMapRef:
+            name: django-config
+        - secretRef:
+            name: django-secrets
+      
+      - name: collectstatic
+        image: YOUR_REGISTRY/django:latest
+        command: ['python', 'manage.py', 'collectstatic', '--noinput']
+        envFrom:
+        - configMapRef:
+            name: django-config
+        volumeMounts:
+        - name: static
+          mountPath: /app/static
+      
+      containers:
+      - name: django
+        image: YOUR_REGISTRY/django:latest
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: django-config
+        - secretRef:
+            name: django-secrets
+        volumeMounts:
+        - name: static
+          mountPath: /app/static
+        - name: media
+          mountPath: /app/media
+        
+        livenessProbe:
+          httpGet:
+            path: /health/
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        
+        readinessProbe:
+          httpGet:
+            path: /health/
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      
+      volumes:
+      - name: static
+        emptyDir: {}
+      - name: media
+        persistentVolumeClaim:
+          claimName: media-pvc
