@@ -1,0 +1,56 @@
+# k8s/jobs/django-migrate-job.yaml
+# Kubernetes Job to run Django database migrations
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: safarichap-migrate
+  labels:
+    app: safarichap
+    job-type: migrate
+spec:
+  ttlSecondsAfterFinished: 300  # Auto-cleanup after 5 minutes
+  backoffLimit: 3  # Retry up to 3 times on failure
+  template:
+    metadata:
+      labels:
+        app: safarichap
+        job-type: migrate
+    spec:
+      restartPolicy: Never
+      
+      initContainers:
+      # Wait for database to be ready
+      - name: wait-for-db
+        image: postgres:15-alpine
+        command: ['sh', '-c']
+        args:
+          - |
+            until pg_isready -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER; do
+              echo "Waiting for database...";
+              sleep 2;
+            done;
+            echo "Database is ready!";
+        envFrom:
+        - configMapRef:
+            name: safarichap-config
+        - secretRef:
+            name: safarichap-secrets
+      
+      containers:
+      - name: migrate
+        image: YOUR_REGISTRY/safarichap-app:latest
+        command: ["python", "manage.py", "migrate", "--noinput"]
+        envFrom:
+        - configMapRef:
+            name: safarichap-config
+        - secretRef:
+            name: safarichap-secrets
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"

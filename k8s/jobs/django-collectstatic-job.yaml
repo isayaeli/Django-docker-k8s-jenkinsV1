@@ -1,0 +1,47 @@
+# k8s/jobs/django-collectstatic-job.yaml
+# Kubernetes Job to collect Django static files
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: safarichap-collectstatic
+  labels:
+    app: safarichap
+    job-type: collectstatic
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: safarichap
+        job-type: collectstatic
+    spec:
+      restartPolicy: Never
+      
+      containers:
+      - name: collectstatic
+        image: YOUR_REGISTRY/safarichap:latest
+        command: ["python", "manage.py", "collectstatic", "--noinput", "--clear"]
+        envFrom:
+        - configMapRef:
+            name: safarichap-config
+        - secretRef:
+            name: safarichap-secrets
+        
+        volumeMounts:
+        - name: static
+          mountPath: /app/static
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      
+      volumes:
+      - name: static
+        persistentVolumeClaim:
+          claimName: static-pvc

@@ -1,0 +1,216 @@
+// jenkins/Jenkinsfile.dev
+// Development pipeline for continuous integration
+
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_REGISTRY = 'your-registry.com'
+        IMAGE_NAME = 'django-app'
+        ENVIRONMENT = 'development'
+        NAMESPACE = 'django-development'
+        SLACK_CHANNEL = '#dev-deployments'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+                script {
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+                    env.BUILD_TAG = "dev-${env.GIT_COMMIT_SHORT}-${env.BUILD_NUMBER}"
+                }
+                echo "Building: ${env.BUILD_TAG}"
+            }
+        }
+        
+        stage('Setup Environment') {
+            steps {
+                script {
+                    // Create .env file for tests
+                    writeFile file: '.env.test', text: """
+                        DJANGO_SETTINGS_MODULE=myproject.settings.test
+                        SECRET_KEY=test-secret-key
+                        DEBUG=True
+                        POSTGRES_DB=test_db
+                        POSTGRES_USER=test_user
+                        POSTGRES_PASSWORD=test_pass
+                        POSTGRES_HOST=postgres-test
+                        POSTGRES_PORT=5432
+                        CELERY_BROKER_URL=redis://redis-test:6379/0
+                        CELERY_RESULT_BACKEND=redis://redis-test:6379/0
+"""
+                }
+            }
+        }
+        
+        stage('Lint') {
+            parallel {
+                stage('Flake8') {
+                    steps {
+                        sh 'docker-compose -f docker-compose.test.yml run --rm lint flake8 app/'
+                    }
+                }
+                stage('Black') {
+                    steps {
+                        sh 'docker-compose -f docker-compose.test.yml run --rm lint black --check app/'
+                    }
+                }
+                stage('isort') {
+                    steps {
+                        sh 'docker-compose -f docker-compose.test.yml run --rm lint isort --check-only app/'
+                    }
+                }
+            }
+        }
+        
+        stage('Security Scan') {
+            steps {
+                sh 'docker-compose -f docker-compose.test.yml run --rm security'
+            }
+        }
+        
+        stage('Unit Tests') {
+            steps {
+                sh '''
+                    docker-compose -f docker-compose.test.yml run --rm web \
+                    pytest tests/unit/ -v --junitxml=test-results/unit-results.xml
+                '''
+            }
+            post {
+                always {
+                    junit 'test-results/unit-results.xml'
+                }
+            }
+        }
+        
+        stage('Integration Tests') {
+            steps {
+                sh '''
+                    docker-compose -f docker-compose.test.yml run --rm web \
+                    pytest tests/integration/ -v --junitxml=test-results/integration-results.xml
+                '''
+            }
+            post {
+                always {
+                    junit 'test-results/integration-results.xml'
+                }
+            }
+        }
+        
+        stage('Coverage Report') {
+            steps {
+                sh 'docker-compose -f docker-compose.test.yml run --rm coverage'
+            }
+            post {
+                always {
+                    publishHTML([
+                        reportDir: 'htmlcov',
+                        reportFiles: 'index.html',
+                        reportName: 'Coverage Report'
+                    ])
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    docker.build(
+                        "${DOCKER_REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}",
+                        "-f docker/django/Dockerfile ."
+                    )
+                }
+            }
+        }
+        
+        stage('Push to Registry') {
+            steps {
+                script {
+                    docker.withRegistry("https://${DOCKER_REGISTRY}", 'docker-registry-creds') {
+                        docker.image("${DOCKER_REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}").push()
+                        docker.image("${DOCKER_REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}").push('dev-latest')
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to Development') {
+            steps {
+                sh """
+                    cd k8s/overlays/development
+                    kustomize edit set image ${DOCKER_REGISTRY}/${IMAGE_NAME}=${DOCKER_REGISTRY}/${IMAGE_NAME}:${BUILD_TAG}
+                    kubectl apply -k .
+                    kubectl rollout status deployment/django -n ${NAMESPACE} --timeout=5m
+                """
+            }
+        }
+        
+        stage('Run Migrations') {
+            steps {
+                sh """
+                    kubectl delete job django-migrate --ignore-not-found -n ${NAMESPACE}
+                    kubectl apply -f k8s/jobs/django-migrate-job.yaml -n ${NAMESPACE}
+                    kubectl wait --for=condition=complete --timeout=300s job/django-migrate -n ${NAMESPACE}
+                """
+            }
+        }
+        
+        stage('Smoke Tests') {
+            steps {
+                script {
+                    // Get the ingress URL
+                    def ingressUrl = sh(
+                        script: "kubectl get ingress -n ${NAMESPACE} -o jsonpath='{.items[0].spec.rules[0].host}'",
+                        returnStdout: true
+                    ).trim()
+                    
+                    // Wait for application to be ready
+                    sleep 30
+                    
+                    // Run smoke tests
+                    sh """
+                        curl -f http://${ingressUrl}/health/ || exit 1
+                        curl -f http://${ingressUrl}/api/v1/ || exit 1
+                    """
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'good',
+                message: """
+                    ✅ Development Deployment Successful
+                    Job: ${env.JOB_NAME}
+                    Build: #${env.BUILD_NUMBER}
+                    Tag: ${env.BUILD_TAG}
+                    Commit: ${env.GIT_COMMIT_SHORT}
+                                    """.stripIndent()
+            )
+        }
+        failure {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: """
+                    ❌ Development Deployment Failed
+                    Job: ${env.JOB_NAME}
+                    Build: #${env.BUILD_NUMBER}
+                    Commit: ${env.GIT_COMMIT_SHORT}
+                                    """.stripIndent()
+            )
+        }
+        always {
+            // Cleanup
+            sh 'docker-compose -f docker-compose.test.yml down -v'
+            cleanWs()
+        }
+    }
+}

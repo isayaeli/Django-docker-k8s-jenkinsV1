@@ -1,0 +1,83 @@
+# k8s/jobs/django-createsuperuser-job.yaml
+# Kubernetes Job to create Django superuser
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: safarichap-createsuperuser
+  labels:
+    app: dsafarichapo
+    job-type: createsuperuser
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: safarichap
+        job-type: createsuperuser
+    spec:
+      restartPolicy: Never
+      
+      initContainers:
+      # Wait for migrations to complete
+      - name: wait-for-migrations
+        image: YOUR_REGISTRY/safarichap:latest
+        command: ['sh', '-c']
+        args:
+          - |
+            python manage.py showmigrations | grep '\[ \]' && exit 1 || exit 0
+        envFrom:
+        - configMapRef:
+            name: safarichap-config
+        - secretRef:
+            name: safarichap-secrets
+      
+      containers:
+      - name: createsuperuser
+        image: YOUR_REGISTRY/safarichap:latest
+        command: ['sh', '-c']
+        args:
+          - |
+            python manage.py shell << EOF
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            if not User.objects.filter(username='$SAFARICHAP_SUPERUSER_USERNAME').exists():
+                User.objects.create_superuser(
+                    username='$SAFARICHAP_SUPERUSER_USERNAME',
+                    email='$SAFARICHAP_SUPERUSER_EMAIL',
+                    password='$SAFARICHAP_SUPERUSER_PASSWORD'
+                )
+                print('Superuser created successfully')
+            else:
+                print('Superuser already exists')
+            EOF
+        envFrom:
+        - configMapRef:
+            name: safarichap-config
+        - secretRef:
+            name: safarichap-secrets
+        env:
+        - name: SAFARICHAP_SUPERUSER_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: safarichap-secrets
+              key: SUPERUSER_USERNAME
+        - name: SAFARICHAP_SUPERUSER_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: safarichap-secrets
+              key: SUPERUSER_EMAIL
+        - name: SAFARICHAP_SUPERUSER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: safarichap-secrets
+              key: SUPERUSER_PASSWORD
+        
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"

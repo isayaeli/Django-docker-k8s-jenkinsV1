@@ -1,0 +1,257 @@
+// jenkins/Jenkinsfile.staging
+// Staging pipeline for pre-production testing
+
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_REGISTRY = 'your-registry.com'
+        IMAGE_NAME = 'django-app'
+        ENVIRONMENT = 'staging'
+        NAMESPACE = 'django-staging'
+        SLACK_CHANNEL = '#staging-deployments'
+    }
+    
+    parameters {
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: 'dev-latest',
+            description: 'Docker image tag to deploy (usually from dev)'
+        )
+        booleanParam(
+            name: 'RUN_SMOKE_TESTS',
+            defaultValue: true,
+            description: 'Run smoke tests after deployment'
+        )
+        booleanParam(
+            name: 'RUN_E2E_TESTS',
+            defaultValue: false,
+            description: 'Run end-to-end tests after deployment'
+        )
+    }
+    
+    stages {
+        stage('Validate') {
+            steps {
+                script {
+                    echo "Deploying image: ${params.IMAGE_TAG} to staging"
+                    
+                    // Verify image exists
+                    sh """
+                        docker pull ${DOCKER_REGISTRY}/${IMAGE_NAME}:${params.IMAGE_TAG}
+                    """
+                }
+            }
+        }
+        
+        stage('Approval') {
+            steps {
+                script {
+                    timeout(time: 1, unit: 'HOURS') {
+                        input message: 'Deploy to Staging?', 
+                              ok: 'Deploy',
+                              submitter: 'admin,devops'
+                    }
+                }
+            }
+        }
+        
+        stage('Tag for Staging') {
+            steps {
+                script {
+                    def stagingTag = "staging-${env.BUILD_NUMBER}"
+                    
+                    docker.withRegistry("https://${DOCKER_REGISTRY}", 'docker-registry-creds') {
+                        def image = docker.image("${DOCKER_REGISTRY}/${IMAGE_NAME}:${params.IMAGE_TAG}")
+                        image.pull()
+                        image.push(stagingTag)
+                        image.push('staging-latest')
+                    }
+                    
+                    env.STAGING_TAG = stagingTag
+                }
+            }
+        }
+        
+        stage('Backup Database') {
+            steps {
+                sh """
+                    ./k8s-scripts/backup-db.sh ${ENVIRONMENT}
+                """
+            }
+        }
+        
+        stage('Deploy to Staging') {
+            steps {
+                sh """
+                    cd k8s/overlays/staging
+                    kustomize edit set image ${DOCKER_REGISTRY}/${IMAGE_NAME}=${DOCKER_REGISTRY}/${IMAGE_NAME}:${env.STAGING_TAG}
+                    kubectl apply -k .
+                """
+            }
+        }
+        
+        stage('Wait for Rollout') {
+            steps {
+                sh """
+                    kubectl rollout status deployment/django -n ${NAMESPACE} --timeout=10m
+                    kubectl rollout status deployment/nginx -n ${NAMESPACE} --timeout=5m
+                """
+            }
+        }
+        
+        stage('Run Migrations') {
+            steps {
+                sh """
+                    ./k8s-scripts/migrate.sh ${ENVIRONMENT} ${env.STAGING_TAG}
+                """
+            }
+        }
+        
+        stage('Smoke Tests') {
+            when {
+                expression { params.RUN_SMOKE_TESTS }
+            }
+            steps {
+                script {
+                    def ingressUrl = sh(
+                        script: "kubectl get ingress -n ${NAMESPACE} -o jsonpath='{.items[0].spec.rules[0].host}'",
+                        returnStdout: true
+                    ).trim()
+                    
+                    sleep 30
+                    
+                    sh """
+                        # Health check
+                        curl -f https://${ingressUrl}/health/ || exit 1
+                        
+                        # API check
+                        curl -f https://${ingressUrl}/api/v1/ || exit 1
+                        
+                        # Admin check
+                        curl -f https://${ingressUrl}/admin/ || exit 1
+                    """
+                }
+            }
+        }
+        
+        stage('E2E Tests') {
+            when {
+                expression { params.RUN_E2E_TESTS }
+            }
+            steps {
+                script {
+                    def ingressUrl = sh(
+                        script: "kubectl get ingress -n ${NAMESPACE} -o jsonpath='{.items[0].spec.rules[0].host}'",
+                        returnStdout: true
+                    ).trim()
+                    
+                    sh """
+                        export TEST_URL=https://${ingressUrl}
+                        docker-compose -f docker-compose.test.yml run --rm web \
+                        pytest tests/e2e/ -v --junitxml=test-results/e2e-results.xml
+                    """
+                }
+            }
+            post {
+                always {
+                    junit 'test-results/e2e-results.xml'
+                }
+            }
+        }
+        
+        stage('Performance Tests') {
+            steps {
+                script {
+                    def ingressUrl = sh(
+                        script: "kubectl get ingress -n ${NAMESPACE} -o jsonpath='{.items[0].spec.rules[0].host}'",
+                        returnStdout: true
+                    ).trim()
+                    
+                    // Run basic load test
+                    sh """
+                        # Install apache bench if needed
+                        which ab || apt-get install -y apache2-utils
+                        
+                        # Simple load test
+                        ab -n 1000 -c 10 https://${ingressUrl}/api/v1/
+                    """
+                }
+            }
+        }
+        
+        stage('Check Metrics') {
+            steps {
+                sh """
+                    # Check pod metrics
+                    kubectl top pods -n ${NAMESPACE}
+                    
+                    # Check HPA status
+                    kubectl get hpa -n ${NAMESPACE}
+                    
+                    # Check for any errors in logs
+                    kubectl logs -l app=django -n ${NAMESPACE} --tail=100 | grep -i error || true
+                """
+            }
+        }
+        
+        stage('Generate Report') {
+            steps {
+                script {
+                    def deploymentInfo = sh(
+                        script: "kubectl get deployment django -n ${NAMESPACE} -o json",
+                        returnStdout: true
+                    )
+                    
+                    writeFile file: 'staging-deployment-report.json', text: deploymentInfo
+                    archiveArtifacts artifacts: 'staging-deployment-report.json'
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'good',
+                message: """
+                    ✅ Staging Deployment Successful
+                    Job: ${env.JOB_NAME}
+                    Build: #${env.BUILD_NUMBER}
+                    Image: ${params.IMAGE_TAG} → ${env.STAGING_TAG}
+                    Namespace: ${NAMESPACE}
+                    Smoke Tests: ${params.RUN_SMOKE_TESTS ? 'Passed ✓' : 'Skipped'}
+                    E2E Tests: ${params.RUN_E2E_TESTS ? 'Passed ✓' : 'Skipped'}
+                                    """.stripIndent()
+            )
+        }
+        failure {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: """
+                    ❌ Staging Deployment Failed
+                    Job: ${env.JOB_NAME}
+                    Build: #${env.BUILD_NUMBER}
+                    Image: ${params.IMAGE_TAG}
+                    Namespace: ${NAMESPACE}
+
+                    Action Required: Check logs and consider rollback
+                                    """.stripIndent()
+            )
+            
+            // Automatic rollback on failure
+            script {
+                try {
+                    sh "./k8s-scripts/rollback.sh ${ENVIRONMENT}"
+                } catch (Exception e) {
+                    echo "Rollback failed: ${e.message}"
+                }
+            }
+        }
+        always {
+            cleanWs()
+        }
+    }
+}
