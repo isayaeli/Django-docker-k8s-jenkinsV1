@@ -1,0 +1,19 @@
+# k8s/base/django-service.yaml
+# Service for Django application
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: safarichap
+  labels:
+    app: safarichap
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: django
+

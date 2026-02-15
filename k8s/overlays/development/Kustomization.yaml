@@ -1,0 +1,23 @@
+# k8s/overlays/development/kustomization.yaml
+# Development overlay
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: safarichap-development
+
+bases:
+  - ../../base
+
+patchesStrategicMerge:
+  - deployment-patch.yaml
+  - configmap-patch.yaml
+
+commonLabels:
+  environment: development
+
+replicas:
+  - name: django
+    count: 1
+  - name: nginx
+    count: 1

@@ -1,0 +1,26 @@
+# k8s/base/kustomization.yaml
+# Base Kustomization configuration
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: safarichap
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - postgres-pvc.yaml
+  - postgres-deployment.yaml
+  - postgres-service.yaml
+  - redis-deployment.yaml
+  - redis-service.yaml
+  - django-deployment.yaml
+  - django-service.yaml
+  - nginx-deployment.yaml
+  - nginx-service.yaml
+  - ingress.yaml
+
+commonLabels:
+  app.kubernetes.io/name: safarichap
+  app.kubernetes.io/managed-by: kustomize

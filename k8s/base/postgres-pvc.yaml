@@ -1,0 +1,16 @@
+# k8s/base/postgres-pvc.yaml
+# PersistentVolumeClaim for PostgreSQL data
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  labels:
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard  # Change based on your cloud provider

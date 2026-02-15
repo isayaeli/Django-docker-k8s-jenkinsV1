@@ -1,0 +1,10 @@
+# k8s/base/namespace.yaml
+# Namespace for Django application
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: safarichap
+  labels:
+    name: safarichap
+    environment: base

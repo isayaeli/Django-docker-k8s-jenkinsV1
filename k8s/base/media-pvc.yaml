@@ -1,0 +1,16 @@
+# k8s/base/media-pvc.yaml
+# PersistentVolumeClaim for Django media files
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-pvc
+  labels:
+    app: safarichap
+spec:
+  accessModes:
+    - ReadWriteMany  # Allow multiple pods to access
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: standard  # Change based on your cloud provider
