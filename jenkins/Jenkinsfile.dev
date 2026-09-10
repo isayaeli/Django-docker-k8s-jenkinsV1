@@ -51,17 +51,17 @@ pipeline {
             parallel {
                 stage('Flake8') {
                     steps {
-                        sh 'docker-compose -f docker-compose.test.yml run --rm lint flake8 app/'
+                        sh 'docker-compose -f docker-compose.test.yml run --rm lint flake8 safarichap/'
                     }
                 }
                 stage('Black') {
                     steps {
-                        sh 'docker-compose -f docker-compose.test.yml run --rm lint black --check app/'
+                        sh 'docker-compose -f docker-compose.test.yml run --rm lint black --check safarichap/'
                     }
                 }
                 stage('isort') {
                     steps {
-                        sh 'docker-compose -f docker-compose.test.yml run --rm lint isort --check-only app/'
+                        sh 'docker-compose -f docker-compose.test.yml run --rm lint isort --check-only safarichap/'
                     }
                 }
             }
