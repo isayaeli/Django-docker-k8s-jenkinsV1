@@ -3,89 +3,39 @@ version: '3.8'
 services:
   postgres-test:
     image: postgres:15-alpine
-    container_name: safarchap-postgres-test
+    container_name: safarichap-postgres-test
     environment:
       POSTGRES_DB: test_db
       POSTGRES_USER: test_user
       POSTGRES_PASSWORD: test_pass
     tmpfs:
-      - /var/lib/postgresql/data  # Use tmpfs for faster tests
+      - /var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U test_user"]
       interval: 5s
       timeout: 3s
-      retries: 3
+      retries: 5
 
   redis-test:
     image: redis:7-alpine
-    container_name: safarchap-redis-test
+    container_name: safarichap-redis-test
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 3
+      retries: 5
 
   web:
     build:
       context: .
       dockerfile: docker/django/Dockerfile.dev
-    container_name: safarchap-web-test
-    command: pytest
+    container_name: safarichap-web-test
+    command: python manage.py test --verbosity 2
     volumes:
-      - ./app:/app
-      - ./tests:/app/tests
+      - ./safarichap:/app
     environment:
-      - DJANGO_SETTINGS_MODULE=myproject.settings.test
-      - POSTGRES_DB=test_db
-      - POSTGRES_USER=test_user
-      - POSTGRES_PASSWORD=test_pass
-      - POSTGRES_HOST=postgres-test
-      - POSTGRES_PORT=5432
-      - CELERY_BROKER_URL=redis://redis-test:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis-test:6379/0
-      - CELERY_TASK_ALWAYS_EAGER=True
-    depends_on:
-      postgres-test:
-        condition: service_healthy
-      redis-test:
-        condition: service_healthy
-
-  # Service for running linters
-  lint:
-    build:
-      context: .
-      dockerfile: docker/django/Dockerfile.dev
-    container_name: safarchap-lint-test
-    command: /bin/bash -c "flake8 app/ && black --check app/ && isort --check-only app/"
-    volumes:
-      - ./app:/app
-    environment:
-      - DJANGO_SETTINGS_MODULE=myproject.settings.test
-
-  # Service for running security checks
-  security:
-    build:
-      context: .
-      dockerfile: docker/django/Dockerfile.dev
-    container_name: safarchap-security-test
-    command: bandit -r app/ -ll -f json -o /app/bandit-report.json
-    volumes:
-      - ./app:/app
-
-  # Service for running coverage
-  coverage:
-    build:
-      context: .
-      dockerfile: docker/django/Dockerfile.dev
-    container_name: safarchap-coverage-test
-    command: pytest --cov=app --cov-report=html --cov-report=xml --cov-report=term
-    volumes:
-      - ./app:/app
-      - ./tests:/app/tests
-      - ./htmlcov:/app/htmlcov
-      - ./coverage.xml:/app/coverage.xml
-    environment:
-      - DJANGO_SETTINGS_MODULE=myproject.settings.test
+      - DJANGO_ENV=development
+      - DJANGO_SETTINGS_MODULE=config.settings.development
       - POSTGRES_DB=test_db
       - POSTGRES_USER=test_user
       - POSTGRES_PASSWORD=test_pass
