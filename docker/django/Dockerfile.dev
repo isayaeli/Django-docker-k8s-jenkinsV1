@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY app/requirements/dev.txt .
+COPY requirements/dev.txt .
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r dev.txt
 
 # Final stage
