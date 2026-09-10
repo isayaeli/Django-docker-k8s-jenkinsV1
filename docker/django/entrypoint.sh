@@ -8,4 +8,4 @@ while ! nc -z $POSTGRES_HOST $POSTGRES_PORT; do
 done
 echo "PostgreSQL started"
 
-exec "$@"s
+exec "$@"

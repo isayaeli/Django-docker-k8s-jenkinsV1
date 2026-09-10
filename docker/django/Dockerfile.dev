@@ -32,8 +32,8 @@ COPY --from=builder /app/wheels /wheels
 COPY --from=builder /app/dev.txt .
 RUN pip install --no-cache /wheels/*
 
-# Copy application
-COPY . $APP_HOME/
+# Copy application (only the actual Django project, not the whole repo)
+COPY safarichap/ $APP_HOME/
 COPY docker/django/entrypoint.sh /entrypoint.sh
 COPY docker/django/start.sh /start.sh
 
