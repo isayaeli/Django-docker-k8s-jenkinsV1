@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY app/requirements/production.txt .
+COPY app/requirements/dev.txt .
 RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r production.txt
 
 # Final stage
@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy wheels and install
 COPY --from=builder /app/wheels /wheels
-COPY --from=builder /app/production.txt .
+COPY --from=builder /app/dev.txt .
 RUN pip install --no-cache /wheels/*
 
 # Copy application
