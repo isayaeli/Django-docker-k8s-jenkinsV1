@@ -30,18 +30,18 @@ pipeline {
         stage('Setup Environment') {
             steps {
                 script {
-                    writeFile file: '.env.test', text: """
+                    writeFile file: '.env.dev', text: """
 DJANGO_ENV=development
 DJANGO_SETTINGS_MODULE=config.settings.development
 SECRET_KEY=test-secret-key
 DEBUG=True
-POSTGRES_DB=test_db
-POSTGRES_USER=test_user
-POSTGRES_PASSWORD=test_pass
-POSTGRES_HOST=postgres-test
+POSTGRES_DB=django_dev
+POSTGRES_USER=django
+POSTGRES_PASSWORD=django
+POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
-CELERY_BROKER_URL=redis://redis-test:6379/0
-CELERY_RESULT_BACKEND=redis://redis-test:6379/0
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
 """.stripIndent()
                 }
             }
@@ -50,7 +50,7 @@ CELERY_RESULT_BACKEND=redis://redis-test:6379/0
         stage('Run Django Tests') {
             steps {
                 sh '''
-                    docker-compose -f docker-compose.test.yml run --rm web
+                    docker compose -f docker-compose.dev.yml run --rm web python manage.py test --verbosity 2
                 '''
             }
         }
@@ -145,7 +145,7 @@ CELERY_RESULT_BACKEND=redis://redis-test:6379/0
             )
         }
         always {
-            sh 'docker-compose -f docker-compose.test.yml down -v || true'
+            sh 'docker compose -f docker-compose.dev.yml down -v || true'
             cleanWs()
         }
     }

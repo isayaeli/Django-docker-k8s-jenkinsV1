@@ -30,9 +30,8 @@ services:
       context: .
       dockerfile: docker/django/Dockerfile.dev
     container_name: safarichap-web-test
+    working_dir: /app
     command: python manage.py test --verbosity 2
-    volumes:
-      - ./safarichap:/app
     environment:
       - DJANGO_ENV=development
       - DJANGO_SETTINGS_MODULE=config.settings.development

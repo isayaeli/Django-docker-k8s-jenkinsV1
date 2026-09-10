@@ -3,21 +3,27 @@ FROM python:3.11-slim as builder
 
 WORKDIR /app
 
+ENV PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRY=5
+
 # Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY app/requirements/production.txt .
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r production.txt
+COPY requirements/prod.txt .
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r prod.txt
 
 # Final stage
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    APP_HOME=/app
+    APP_HOME=/app \
+    PIP_DEFAULT_TIMEOUT=120 \
+    PIP_RETRY=5
 
 WORKDIR $APP_HOME
 
@@ -29,11 +35,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy wheels and install
 COPY --from=builder /app/wheels /wheels
-COPY --from=builder /app/production.txt .
-RUN pip install --no-cache /wheels/*
+COPY --from=builder /app/prod.txt .
+RUN python -m pip install --no-cache-dir --retries 5 --timeout 120 /wheels/*
 
 # Copy application
-COPY app/ $APP_HOME/
+COPY safarichap/ $APP_HOME/
 COPY docker/django/entrypoint.sh /entrypoint.sh
 COPY docker/django/start.sh /start.sh
 

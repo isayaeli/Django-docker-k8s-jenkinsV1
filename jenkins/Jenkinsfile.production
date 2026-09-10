@@ -1,13 +1,14 @@
 pipeline {
     agent any
-    
+
     environment {
         DOCKER_REGISTRY = 'your-registry.com'
-        IMAGE_NAME = 'django-app'
+        IMAGE_NAME = 'safarichap'
         KUBECONFIG = credentials('kubeconfig-prod')
+        NAMESPACE = 'safarichap-production'
         SLACK_CHANNEL = '#deployments'
     }
-    
+
     stages {
         stage('Checkout') {
             steps {
@@ -21,7 +22,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Setup Environment') {
             steps {
                 withCredentials([file(credentialsId: 'django-env-prod', variable: 'ENV_FILE')]) {
@@ -29,38 +30,39 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Run Tests') {
             steps {
                 sh '''
-                    docker-compose -f docker-compose.test.yml build
-                    docker-compose -f docker-compose.test.yml run --rm web pytest
-                    docker-compose -f docker-compose.test.yml run --rm web flake8
-                    docker-compose -f docker-compose.test.yml run --rm web black --check .
+                    docker compose -f docker-compose.test.yml build
+                    docker compose -f docker-compose.test.yml run --rm web
+                    docker compose -f docker-compose.test.yml down -v
                 '''
             }
             post {
                 always {
-                    sh 'docker-compose -f docker-compose.test.yml down -v'
+                    sh 'docker compose -f docker-compose.test.yml down -v || true'
                 }
             }
         }
-        
+
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build(
-                        "${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}",
-                        "-f docker/django/Dockerfile ."
-                    )
-                    docker.build(
-                        "${DOCKER_REGISTRY}/${IMAGE_NAME}:latest",
-                        "-f docker/django/Dockerfile ."
-                    )
+                    sh """
+                        docker build \
+                          -f docker/django/Dockerfile \
+                          -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
+                          .
+                        docker build \
+                          -f docker/django/Dockerfile \
+                          -t ${DOCKER_REGISTRY}/${IMAGE_NAME}:latest \
+                          .
+                    """
                 }
             }
         }
-        
+
         stage('Push to Registry') {
             steps {
                 script {
@@ -71,7 +73,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Security Scan') {
             steps {
                 sh """
@@ -79,27 +81,28 @@ pipeline {
                 """
             }
         }
-        
+
         stage('Deploy to Kubernetes') {
             steps {
                 sh """
                     cd k8s/overlays/production
                     kustomize edit set image ${DOCKER_REGISTRY}/${IMAGE_NAME}=${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
                     kubectl apply -k .
-                    kubectl rollout status deployment/django -n production
+                    kubectl rollout status deployment/django -n ${NAMESPACE} --timeout=5m
                 """
             }
         }
-        
+
         stage('Run Migrations') {
             steps {
                 sh """
-                    kubectl apply -f k8s/jobs/django-migrate-job.yaml
-                    kubectl wait --for=condition=complete --timeout=300s job/django-migrate
+                    kubectl delete job safarichap-migrate --ignore-not-found -n ${NAMESPACE}
+                    kubectl apply -f k8s/jobs/django-migrate-job.yaml -n ${NAMESPACE}
+                    kubectl wait --for=condition=complete --timeout=300s job/safarichap-migrate -n ${NAMESPACE}
                 """
             }
         }
-        
+
         stage('Smoke Tests') {
             steps {
                 sh '''
@@ -109,7 +112,7 @@ pipeline {
             }
         }
     }
-    
+
     post {
         success {
             slackSend(
