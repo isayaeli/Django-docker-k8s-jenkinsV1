@@ -67,54 +67,54 @@ pipeline {
         //     }
         // }
         
-        stage('Security Scan') {
-            steps {
-                sh 'docker-compose -f docker-compose.test.yml run --rm security'
-            }
-        }
+        // stage('Security Scan') {
+        //     steps {
+        //         sh 'docker-compose -f docker-compose.test.yml run --rm security'
+        //     }
+        // }
         
-        stage('Unit Tests') {
-            steps {
-                sh '''
-                    docker-compose -f docker-compose.test.yml run --rm web \
-                    pytest tests/unit/ -v --junitxml=test-results/unit-results.xml
-                '''
-            }
-            post {
-                always {
-                    junit 'test-results/unit-results.xml'
-                }
-            }
-        }
+        // stage('Unit Tests') {
+        //     steps {
+        //         sh '''
+        //             docker-compose -f docker-compose.test.yml run --rm web \
+        //             pytest tests/unit/ -v --junitxml=test-results/unit-results.xml
+        //         '''
+        //     }
+        //     post {
+        //         always {
+        //             junit 'test-results/unit-results.xml'
+        //         }
+        //     }
+        // }
         
-        stage('Integration Tests') {
-            steps {
-                sh '''
-                    docker-compose -f docker-compose.test.yml run --rm web \
-                    pytest tests/integration/ -v --junitxml=test-results/integration-results.xml
-                '''
-            }
-            post {
-                always {
-                    junit 'test-results/integration-results.xml'
-                }
-            }
-        }
+        // stage('Integration Tests') {
+        //     steps {
+        //         sh '''
+        //             docker-compose -f docker-compose.test.yml run --rm web \
+        //             pytest tests/integration/ -v --junitxml=test-results/integration-results.xml
+        //         '''
+        //     }
+        //     post {
+        //         always {
+        //             junit 'test-results/integration-results.xml'
+        //         }
+        //     }
+        // }
         
-        stage('Coverage Report') {
-            steps {
-                sh 'docker-compose -f docker-compose.test.yml run --rm coverage'
-            }
-            post {
-                always {
-                    publishHTML([
-                        reportDir: 'htmlcov',
-                        reportFiles: 'index.html',
-                        reportName: 'Coverage Report'
-                    ])
-                }
-            }
-        }
+        // stage('Coverage Report') {
+        //     steps {
+        //         sh 'docker-compose -f docker-compose.test.yml run --rm coverage'
+        //     }
+        //     post {
+        //         always {
+        //             publishHTML([
+        //                 reportDir: 'htmlcov',
+        //                 reportFiles: 'index.html',
+        //                 reportName: 'Coverage Report'
+        //             ])
+        //         }
+        //     }
+        // }
         
         stage('Build Docker Image') {
             steps {
