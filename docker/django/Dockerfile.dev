@@ -33,7 +33,7 @@ COPY --from=builder /app/dev.txt .
 RUN pip install --no-cache /wheels/*
 
 # Copy application
-COPY app/ $APP_HOME/
+COPY . $APP_HOME/
 COPY docker/django/entrypoint.sh /entrypoint.sh
 COPY docker/django/start.sh /start.sh
 
